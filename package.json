@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "express": "^4.14.0",
+    "http-request": "^0.7.0",
     "request": "^2.79.0",
     "sequelize": "^3.29.0",
     "sqlite": "^2.2.3"
