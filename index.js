@@ -16,16 +16,16 @@ app.get('/films/:id/recommendations', getFilmRecommendations);
 function getFilmRecommendations(req, res) {
 
   try {
-		var allFilmResults = [];
-		var genre_name = "", genre_id;
-		var film_release_date = "";
-		var finalRecommendations = {
-			"recommendations" : [],
-			"meta" : {}
-		};
+			var allFilmResults = [];
+			var genre_name = "", genre_id;
+			var film_release_date = "";
+			var finalRecommendations = {
+				"recommendations" : [],
+				"meta" : {}
+			};
 
-  	const limit = 10, // || params.limit;
-  		offset = 0; // || params.offset;
+  	const limit = req.query.limit || 10,
+  		offset = req.query.offset || 0;
 
   		finalRecommendations["meta"]["limit"] = limit;
   		finalRecommendations["meta"]["offset"] = offset;
@@ -119,7 +119,11 @@ function getFilmRecommendations(req, res) {
 				});
 
 
-				//finally, sort the results by id
+				//finally, sort by id, limit, and offset the results as needed
+				var recommendationArray = finalRecommendations["recommendations"];
+				recommendationArray = _.sortBy(recommendationArray, 'id');
+				recommendationArray = recommendationArray.slice(offset, offset + limit);
+				finalRecommendations["recommendations"] = recommendationArray;
 
 				return res.json(finalRecommendations);
 
