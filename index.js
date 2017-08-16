@@ -1,11 +1,14 @@
 const express = require('express');
 const Promise = require('bluebird');
 const db =  require('sqlite');
-const http = require('http-request');
+const http = require('request-promise');
 const moment = require('moment');
+const _ = require('lodash');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+var allFilmResults = [];
 
 
 app.get('/films/:id/recommendations', getFilmRecommendations);
@@ -36,7 +39,64 @@ function getFilmRecommendations(req, res) {
     })
     .then(function(allResults){
 
-    	res.json({'all results': allResults });
+    	if ( !allResults || !allResults.length && allResults.length > 0) {
+	    	res.json({'all results': "no recommendations found" });
+    	}
+
+    	allFilmResults = allResults;
+
+    	var reviewQuery = "http://credentials-api.generalassemb.ly/4576f55f-c427-4cfc-a11c-5bfe914ca6c1?films=";
+
+    	_.forEach(allResults, function( singleResult ) {
+    		reviewQuery = reviewQuery + singleResult.id + ","
+    	});
+
+    	console.log("query string is " + reviewQuery);
+
+			var options = {
+			    uri: reviewQuery,
+			    headers: {
+			        'User-Agent': 'Request-Promise'
+			    },
+			    json: true // Automatically parses the JSON string in the response 
+			};    	
+
+    	return http.get(options)
+    })
+    .then(function(results){
+
+				var reviewResults = results;
+				
+				//filter out the movies with less than 5 reviews
+				reviewResults = _.filter(reviewResults, function(oneFilm) { return oneFilm.reviews.length >= 5; } );
+
+				//of the films that are left, filter out the ones that dont have an average rating of at least 4
+				reviewResults = _.filter(reviewResults, function(oneFilm) {
+
+					var ratings_total = 0;
+					_.forEach(oneFilm.reviews, function(oneReview, index){
+						ratings_total = ratings_total + oneReview.rating;
+					});
+
+					const average_rating = ratings_total / oneFilm.reviews.length;
+
+					if (average_rating < 4 ){
+						console.log("getting rid of film " + oneFilm.film_id + " which has an average of " + average_rating);
+					}
+					return average_rating >= 4.0;
+
+				});
+
+				//by this point, reviewResults only contains the reviews that meet the minimum requirements, so we just need to find the correct films in the list of film objects to return to the requester
+				const film_ids = _.map(reviewResults, function(reviewList) { return reviewList.film_id; } );
+				allFilmResults = _.filter(allFilmResults, function(film) {
+					return film_ids.indexOf(film.id) > -1;
+				});
+
+				//finally, sort the results by id
+				allFilmResults = _.sortBy(allFilmResults, 'id');
+
+				return res.json({"results" : allFilmResults });
 
     })
     .catch(function(err){
@@ -63,5 +123,7 @@ Promise.resolve()
   .catch(err => console.error(err.stack))
   // Finally, launch Node.js app 
   .finally(() => app.listen(port));
+
+
 
 
