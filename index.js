@@ -15,7 +15,7 @@ app.get('/films/:id/recommendations', getFilmRecommendations);
 // ROUTE HANDLER
 function getFilmRecommendations(req, res) {
 
-  try {
+	try {
 			var allFilmResults = [];
 			var genre_name = "", genre_id;
 			var film_release_date = "";
@@ -24,61 +24,67 @@ function getFilmRecommendations(req, res) {
 				"meta" : {}
 			};
 
-  	const limit = req.query.limit || 10,
-  		offset = req.query.offset || 0;
+		if ( ( req.query.limit && !Number.isInteger(parseInt(req.query.limit)) ) || 
+			 ( req.query.offset && !Number.isInteger(parseInt(req.query.offset)) ) ||
+			 ( !req.params.id || (req.params.id && !Number.isInteger(parseInt(req.params.id)) ) ) ){
+			return res.status(422).json( { "message" : "Return an explicit error here" } )
+		}
 
-  		finalRecommendations["meta"]["limit"] = limit;
-  		finalRecommendations["meta"]["offset"] = offset;
+		const limit = req.query.limit || 10,
+			offset = req.query.offset || 0;
 
-  	// first get the genre of the film being queried
-    db.get('SELECT genre_id, release_date FROM films WHERE id = ?', req.params.id)
-    .then(function(result){
-    	
-    	//set the genre id and get the next one
-    	if ( !result || !result.genre_id || !result.release_date) {
-    		throw new Error('film document not found');
-    	}
+			finalRecommendations["meta"]["limit"] = limit;
+			finalRecommendations["meta"]["offset"] = offset;
 
-    	genre_id = result.genre_id;
+		// first get the genre of the film being queried
+		db.get('SELECT genre_id, release_date FROM films WHERE id = ?', req.params.id)
+		.then(function(result){
+			
+			//set the genre id and get the next one
+			if ( !result || !result.genre_id || !result.release_date) {
+				throw new Error('film document not found');
+			}
 
-    	film_release_date = result.release_date;
+			genre_id = result.genre_id;
 
-    	return db.get('SELECT name FROM genres WHERE id = ?', result.genre_id);
-    })
-    .then(function(result){
+			film_release_date = result.release_date;
 
-    	genre_name = result.name;
+			return db.get('SELECT name FROM genres WHERE id = ?', result.genre_id);
+		})
+		.then(function(result){
 
-    	const release_date_ceiling = moment(film_release_date).add(15, 'y').format("YYYY-MM-DD");
-    	const release_date_floor = moment(film_release_date).subtract(15, 'y').format("YYYY-MM-DD");
+			genre_name = result.name;
 
-    	return db.all('SELECT * FROM films WHERE genre_id = ? AND release_date <= ? AND release_date >= ?', genre_id, release_date_ceiling, release_date_floor)
-    })
-    .then(function(allResults){
+			const release_date_ceiling = moment(film_release_date).add(15, 'y').format("YYYY-MM-DD");
+			const release_date_floor = moment(film_release_date).subtract(15, 'y').format("YYYY-MM-DD");
 
-    	if ( !allResults || !allResults.length && allResults.length > 0) {
-	    	res.json({'all results': "no recommendations found" });
-    	}
+			return db.all('SELECT * FROM films WHERE genre_id = ? AND release_date <= ? AND release_date >= ?', genre_id, release_date_ceiling, release_date_floor)
+		})
+		.then(function(allResults){
 
-    	allFilmResults = allResults;
+			if ( !allResults || !allResults.length && allResults.length > 0) {
+				res.json({'all results': "no recommendations found" });
+			}
 
-    	var reviewQuery = "http://credentials-api.generalassemb.ly/4576f55f-c427-4cfc-a11c-5bfe914ca6c1?films=";
+			allFilmResults = allResults;
 
-    	_.forEach(allResults, function( singleResult ) {
-    		reviewQuery = reviewQuery + singleResult.id + ","
-    	});
+			var reviewQuery = "http://credentials-api.generalassemb.ly/4576f55f-c427-4cfc-a11c-5bfe914ca6c1?films=";
+
+			_.forEach(allResults, function( singleResult ) {
+				reviewQuery = reviewQuery + singleResult.id + ","
+			});
 
 			var options = {
-			    uri: reviewQuery,
-			    headers: {
-			        'User-Agent': 'Request-Promise'
-			    },
-			    json: true // Automatically parses the JSON string in the response 
+					uri: reviewQuery,
+					headers: {
+							'User-Agent': 'Request-Promise'
+					},
+					json: true // Automatically parses the JSON string in the response 
 			};    	
 
-    	return http.get(options)
-    })
-    .then(function(results){
+			return http.get(options)
+		})
+		.then(function(results){
 
 				var reviewResults = results;
 				
@@ -127,31 +133,37 @@ function getFilmRecommendations(req, res) {
 
 				return res.json(finalRecommendations);
 
-    })
-    .catch(function(err){
-	    if ( !err ){
-	    	res.json({'result' : 'there was an error with this request' });
-	    } else {
+		})
+		.catch(function(err){
+			if ( !err ){
+				res.json({'result' : 'there was an error with this request' });
+			} else {
 				res.json({'result' : err });
-	    }
-    });
-  } catch (err) {
-    if ( !err ){
-    	res.json({'result' : 'there was an error with this request' });
-    } else {
+			}
+		});
+	} catch (err) {
+		if ( !err ){
+			res.json({'result' : 'there was an error with this request' });
+		} else {
 			res.json({'result' : err });
-    }
-  }
+		}
+	}
 
 }
  
- 
+	
+
+app.get('*', function(req, res){
+	return res.status(404).json( { "message" : "Return an explicit error here" } )
+});
+	
+
 Promise.resolve()
-  // First, try connect to the database 
-  .then(() => db.open('./db/database.db', { Promise }))
-  .catch(err => console.error(err.stack))
-  // Finally, launch Node.js app 
-  .finally(() => app.listen(port));
+	// First, try connect to the database 
+	.then(() => db.open('./db/database.db', { Promise }))
+	.catch(err => console.error(err.stack))
+	// Finally, launch Node.js app 
+	.finally(() => app.listen(port));
 
 
 module.exports = app;
