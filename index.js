@@ -8,13 +8,6 @@ const _ = require('lodash');
 const app = express();
 const port = process.env.PORT || 3000;
 
-var allFilmResults = [];
-var genre_name = "", genre_id;
-var film_release_date = "";
-var finalRecommendations = {
-	"recommendations" : [],
-	"meta" : {}
-};
 
 
 app.get('/films/:id/recommendations', getFilmRecommendations);
@@ -23,9 +16,19 @@ app.get('/films/:id/recommendations', getFilmRecommendations);
 function getFilmRecommendations(req, res) {
 
   try {
+		var allFilmResults = [];
+		var genre_name = "", genre_id;
+		var film_release_date = "";
+		var finalRecommendations = {
+			"recommendations" : [],
+			"meta" : {}
+		};
 
   	const limit = 10, // || params.limit;
-  		offset = 1; // || params.offset;
+  		offset = 0; // || params.offset;
+
+  		finalRecommendations["meta"]["limit"] = limit;
+  		finalRecommendations["meta"]["offset"] = offset;
 
   	// first get the genre of the film being queried
     db.get('SELECT genre_id, release_date FROM films WHERE id = ?', req.params.id)
@@ -65,8 +68,6 @@ function getFilmRecommendations(req, res) {
     		reviewQuery = reviewQuery + singleResult.id + ","
     	});
 
-    	console.log("query string is " + reviewQuery);
-
 			var options = {
 			    uri: reviewQuery,
 			    headers: {
@@ -92,11 +93,7 @@ function getFilmRecommendations(req, res) {
 						ratings_total = ratings_total + oneReview.rating;
 					});
 
-					const average_rating = ratings_total / oneFilm.reviews.length;
-
-					if (average_rating < 4 ){
-						console.log("getting rid of film " + oneFilm.film_id + " which has an average of " + average_rating);
-					}
+					const average_rating = Math.round( ( ratings_total / oneFilm.reviews.length) * 100 ) / 100;
 					
 					//if the average rating is above 4.0, add it to the list of final recommendations
 					if ( average_rating >= 4.0 ){
@@ -124,7 +121,7 @@ function getFilmRecommendations(req, res) {
 
 				//finally, sort the results by id
 
-				return res.json({"results" : finalRecommendations });
+				return res.json(finalRecommendations);
 
     })
     .catch(function(err){
@@ -153,5 +150,5 @@ Promise.resolve()
   .finally(() => app.listen(port));
 
 
-
+module.exports = app;
 
