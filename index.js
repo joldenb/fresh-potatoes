@@ -9,6 +9,12 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 var allFilmResults = [];
+var genre_name = "", genre_id;
+var film_release_date = "";
+var finalRecommendations = {
+	"recommendations" : [],
+	"meta" : {}
+};
 
 
 app.get('/films/:id/recommendations', getFilmRecommendations);
@@ -18,8 +24,8 @@ function getFilmRecommendations(req, res) {
 
   try {
 
-  	// const limit = 10, // || params.limit;
-  	// 	offset = 1; // || params.offset;
+  	const limit = 10, // || params.limit;
+  		offset = 1; // || params.offset;
 
   	// first get the genre of the film being queried
     db.get('SELECT genre_id, release_date FROM films WHERE id = ?', req.params.id)
@@ -30,12 +36,20 @@ function getFilmRecommendations(req, res) {
     		throw new Error('film document not found');
     	}
 
-    	console.log("the release date is" + moment(result.release_date).format("YYYY-MM-DD") );
+    	genre_id = result.genre_id;
 
-    	const release_date_ceiling = moment(result.release_date).add(15, 'y').format("YYYY-MM-DD");
-    	const release_date_floor = moment(result.release_date).subtract(15, 'y').format("YYYY-MM-DD");
+    	film_release_date = result.release_date;
 
-    	return db.all('SELECT * FROM films WHERE genre_id = ? AND release_date <= ? AND release_date >= ?', result.genre_id, release_date_ceiling, release_date_floor)
+    	return db.get('SELECT name FROM genres WHERE id = ?', result.genre_id);
+    })
+    .then(function(result){
+
+    	genre_name = result.name;
+
+    	const release_date_ceiling = moment(film_release_date).add(15, 'y').format("YYYY-MM-DD");
+    	const release_date_floor = moment(film_release_date).subtract(15, 'y').format("YYYY-MM-DD");
+
+    	return db.all('SELECT * FROM films WHERE genre_id = ? AND release_date <= ? AND release_date >= ?', genre_id, release_date_ceiling, release_date_floor)
     })
     .then(function(allResults){
 
@@ -71,7 +85,7 @@ function getFilmRecommendations(req, res) {
 				reviewResults = _.filter(reviewResults, function(oneFilm) { return oneFilm.reviews.length >= 5; } );
 
 				//of the films that are left, filter out the ones that dont have an average rating of at least 4
-				reviewResults = _.filter(reviewResults, function(oneFilm) {
+				_.forEach(reviewResults, function(oneFilm) {
 
 					var ratings_total = 0;
 					_.forEach(oneFilm.reviews, function(oneReview, index){
@@ -83,20 +97,34 @@ function getFilmRecommendations(req, res) {
 					if (average_rating < 4 ){
 						console.log("getting rid of film " + oneFilm.film_id + " which has an average of " + average_rating);
 					}
-					return average_rating >= 4.0;
+					
+					//if the average rating is above 4.0, add it to the list of final recommendations
+					if ( average_rating >= 4.0 ){
+
+						var film_name = "", release_date = "";
+						_.forEach(allFilmResults, function(film) {
+							if ( film.id == oneFilm.film_id ){
+								film_name = film.title;
+								release_date = film.release_date;
+							}
+						})
+
+						var new_film_recommendation = {};
+						new_film_recommendation["id"] = oneFilm.film_id;
+						new_film_recommendation["title"] = film_name;
+						new_film_recommendation["releaseDate"] = release_date;
+						new_film_recommendation["genre"] = genre_name;
+						new_film_recommendation["averageRating"] = average_rating;
+						new_film_recommendation["reviews"] = oneFilm.reviews.length;
+						finalRecommendations["recommendations"].push(new_film_recommendation);
+					}
 
 				});
 
-				//by this point, reviewResults only contains the reviews that meet the minimum requirements, so we just need to find the correct films in the list of film objects to return to the requester
-				const film_ids = _.map(reviewResults, function(reviewList) { return reviewList.film_id; } );
-				allFilmResults = _.filter(allFilmResults, function(film) {
-					return film_ids.indexOf(film.id) > -1;
-				});
 
 				//finally, sort the results by id
-				allFilmResults = _.sortBy(allFilmResults, 'id');
 
-				return res.json({"results" : allFilmResults });
+				return res.json({"results" : finalRecommendations });
 
     })
     .catch(function(err){
